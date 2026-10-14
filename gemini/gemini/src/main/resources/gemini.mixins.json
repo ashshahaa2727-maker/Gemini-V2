@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "wtf.gemini.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ClientPlayNetworkHandlerMixin",
+    "FishingBobberEntityAccessor",
+    "GameRendererMixin",
+    "HandledScreenMixin",
+    "HandledScreenAccessor",
+    "LivingEntityRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

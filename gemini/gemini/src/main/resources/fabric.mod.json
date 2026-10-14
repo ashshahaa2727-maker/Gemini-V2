@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "gemini",
+  "version": "${version}",
+  "name": "Gemini Client",
+  "description": "Лёгкий клиентский мод: AutoFish, ItemScroller, FullBright, ShulkerPreview, HUD.",
+  "authors": ["Gemini Team"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["wtf.gemini.Gemini"]
+  },
+  "mixins": ["gemini.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
