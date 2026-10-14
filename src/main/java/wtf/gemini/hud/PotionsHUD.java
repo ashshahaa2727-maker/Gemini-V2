@@ -16,18 +16,29 @@ import java.util.List;
 
 public class PotionsHUD extends HudModule {
 
+    private int currentWidth = 110;
+    private int currentHeight = 20;
+
     public PotionsHUD() {
         super("Potions", Category.HUD, "Отображает список активных эффектов зелий");
     }
 
     @Override
+    public int getWidth() {
+        return currentWidth;
+    }
+
+    @Override
+    public int getHeight() {
+        return currentHeight;
+    }
+
+    @Override
     public int defaultY(int screenWidth, int screenHeight) {
-        // Начальная позиция Y на экране (например, 100 пикселей сверху)
         return 100;
     }
 
     public int defaultX(int screenWidth, int screenHeight) {
-        // Начальная позиция X на экране (10 пикселей слева)
         return 10;
     }
 
@@ -38,10 +49,11 @@ public class PotionsHUD extends HudModule {
 
         Collection<StatusEffectInstance> effects = client.player.getStatusEffects();
         if (effects.isEmpty()) {
+            this.currentHeight = 0;
             return;
         }
 
-        // Сортировка эффектов по оставшемуся времени
+        // Сортировка по убыванию времени действия
         List<StatusEffectInstance> sortedEffects = new ArrayList<>(effects);
         sortedEffects.sort(Comparator.comparingInt(StatusEffectInstance::getDuration).reversed());
 
@@ -55,7 +67,7 @@ public class PotionsHUD extends HudModule {
             // Отрисовка темной полупрозрачной подложки (ARGB 0x90151515)
             context.fill(x, y + yOffset, x + maxWidth, y + yOffset + 20, 0x90151515);
 
-            // Отрисовка иконки зелья (Minecraft 1.21.4)
+            // Отрисовка иконки эффекта (Minecraft 1.21.4)
             if (sprite != null) {
                 context.drawTexture(
                     RenderLayer::getGuiTextured,
@@ -71,7 +83,7 @@ public class PotionsHUD extends HudModule {
                 );
             }
 
-            // Название эффекта + уровень
+            // Название эффекта + римская цифра уровня
             String name = effect.value().getName().getString();
             int amplifier = effectInstance.getAmplifier();
             if (amplifier > 0) {
@@ -81,11 +93,11 @@ public class PotionsHUD extends HudModule {
             // Время действия (мм:сс)
             String duration = formatDuration(effectInstance);
 
-            // Отрисовка текста названия и таймера
+            // Текст названия (белый 0xFFFFFFFF) и времени (серый 0xFFAAAAAA)
             context.drawTextWithShadow(client.textRenderer, name, x + 22, y + yOffset + 2, 0xFFFFFFFF);
             context.drawTextWithShadow(client.textRenderer, duration, x + 22, y + yOffset + 11, 0xFFAAAAAA);
 
-            // Динамический расчет ширины под длинные названия
+            // Рассчитываем ширину по самому широкому названию
             int entryWidth = client.textRenderer.getWidth(name) + 28;
             if (entryWidth > maxWidth) {
                 maxWidth = entryWidth;
@@ -93,6 +105,10 @@ public class PotionsHUD extends HudModule {
 
             yOffset += 23;
         }
+
+        // Обновляем динамические размеры для getWidth() и getHeight()
+        this.currentWidth = maxWidth;
+        this.currentHeight = Math.max(yOffset, 20);
     }
 
     private String formatDuration(StatusEffectInstance effect) {
