@@ -1,6 +1,7 @@
 package wtf.gemini.modules.impl.player;
 
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import wtf.gemini.Gemini;
 import wtf.gemini.Module;
 import wtf.gemini.holyworld.HolyWorldItems;
@@ -9,25 +10,17 @@ import wtf.gemini.util.InventoryUtil;
 
 import java.util.function.Predicate;
 
-/**
- * Смена талисмана и сферы в левой руке одной клавишей.
- *
- * <p>По механикам HolyWorld эффекты сфер и талисманов работают <b>только во второй руке</b>,
- * поэтому переключение между ними — частое действие в бою.
- *
- * <p>Модуль — «действие»: он включён и ждёт нажатия клавиши, состояние при этом не меняется.
- */
 public class ItemSwap extends Module {
     private static final String[] PREFER_KEYWORDS = {"any", "урон", "броня", "скорость"};
 
-    public final ModeSetting prefer = new ModeSetting("Prefer", 0, "Any", "Damage", "Armor", "Speed");
+    public final ModeSetting prefer = new ModeSetting("Prefer Sphere", 0, "Any", "Damage", "Armor", "Speed");
+    public final ModeSetting fallback = new ModeSetting("Fallback", 0, "Totem", "Shield", "None");
 
     public ItemSwap() {
-        super("ItemSwap", Category.PLAYER, "Смена талисмана и сферы во второй руке по клавише");
-        addSettings(prefer);
+        super("ItemSwap", Category.PLAYER, "Умная смена талисмана/сферы/тотема во второй руке");
+        addSettings(prefer, fallback);
     }
 
-    /** Действие выполняется по нажатию, а не переключает модуль. */
     @Override
     public boolean isActionModule() {
         return true;
@@ -35,34 +28,46 @@ public class ItemSwap extends Module {
 
     @Override
     public void activate() {
-        if (mc.player == null) {
-            return;
-        }
+        if (mc.player == null) return;
 
         ItemStack offhand = mc.player.getOffHandStack();
-        int slot;
-        if (HolyWorldItems.isTalisman(offhand)) {
-            slot = findSphere();
-        } else if (HolyWorldItems.isSphere(offhand)) {
-            slot = InventoryUtil.findBest(HolyWorldItems::isTalisman, HolyWorldItems::rank);
-        } else {
-            // В руке нет ни того ни другого — выкладываем лучшую сферу.
-            slot = findSphere();
+        int slotToSwap = -1;
+
+        // Если в руке Сфера или Пусто -> Берем Тотем/Талисман
+        if (HolyWorldItems.isSphere(offhand) || offhand.isEmpty() || (!HolyWorldItems.isTalisman(offhand) && !HolyWorldItems.isSphere(offhand))) {
+            slotToSwap = InventoryUtil.findBest(HolyWorldItems::isTalisman, HolyWorldItems::rank);
+            
+            // Фолбэк, если тотема/талисмана нет
+            if (slotToSwap < 0) {
+                if (fallback.get().equals("Shield")) {
+                    slotToSwap = InventoryUtil.findBest(s -> s.isOf(Items.SHIELD), s -> 1);
+                } else if (fallback.get().equals("Totem")) {
+                    slotToSwap = InventoryUtil.findBest(s -> s.isOf(Items.TOTEM_OF_UNDYING), s -> 1);
+                }
+                
+                // Если и щита нет, то хотя бы сферу возьмем
+                if (slotToSwap < 0) {
+                    slotToSwap = findSphere();
+                }
+            }
+        } 
+        // Если в руке Тотем/Талисман/Щит -> Берем Сферу
+        else {
+            slotToSwap = findSphere();
+            // Если сферы нет, фолбэк на тотем
+            if (slotToSwap < 0) {
+                 slotToSwap = InventoryUtil.findBest(HolyWorldItems::isTalisman, HolyWorldItems::rank);
+            }
         }
 
-        if (slot < 0 || !InventoryUtil.swapWithOffhand(slot)) {
-            Gemini.notifyPlayer("ItemSwap: нечего менять");
-            return;
+        if (slotToSwap >= 0) {
+            InventoryUtil.swapWithOffhand(slotToSwap);
+            Gemini.notifyPlayer("Swap: Предмет успешно изменен");
+        } else {
+            Gemini.notifyPlayer("Swap: Нечего брать в инвентаре!");
         }
-        Gemini.notifyPlayer("ItemSwap: смена в левой руке");
     }
 
-    /**
-     * Ищет сферу по выбранному приоритету.
-     *
-     * <p>Если сфер нужного типа нет — берётся лучшая из остальных: пустая левая рука
-     * в бою хуже, чем сфера «не того» эффекта.
-     */
     private int findSphere() {
         int index = prefer.getIndex();
         if (index > 0 && index < PREFER_KEYWORDS.length) {
