@@ -8,7 +8,6 @@ import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.registry.entry.RegistryEntry;
 import wtf.gemini.Module.Category;
-import wtf.gemini.util.Render2D;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,8 +17,18 @@ import java.util.List;
 public class PotionsHUD extends HudModule {
 
     public PotionsHUD() {
-        // Если категории HUD у вас нет в enum Category, укажите Category.RENDER
         super("Potions", Category.HUD, "Отображает список активных эффектов зелий");
+    }
+
+    @Override
+    public int defaultY(int screenWidth, int screenHeight) {
+        // Начальная позиция Y на экране (например, 100 пикселей сверху)
+        return 100;
+    }
+
+    public int defaultX(int screenWidth, int screenHeight) {
+        // Начальная позиция X на экране (10 пикселей слева)
+        return 10;
     }
 
     @Override
@@ -32,7 +41,7 @@ public class PotionsHUD extends HudModule {
             return;
         }
 
-        // Сортировка по убыванию времени действия
+        // Сортировка эффектов по оставшемуся времени
         List<StatusEffectInstance> sortedEffects = new ArrayList<>(effects);
         sortedEffects.sort(Comparator.comparingInt(StatusEffectInstance::getDuration).reversed());
 
@@ -43,10 +52,10 @@ public class PotionsHUD extends HudModule {
             RegistryEntry<StatusEffect> effect = effectInstance.getEffectType();
             Sprite sprite = client.getStatusEffectSpriteManager().getSprite(effect);
 
-            // Отрисовка подложки через Render2D (ARGB цвет 0x90151515)
-            Render2D.drawRound(context, x, y + yOffset, maxWidth, 20, 4, 0x90151515);
+            // Отрисовка темной полупрозрачной подложки (ARGB 0x90151515)
+            context.fill(x, y + yOffset, x + maxWidth, y + yOffset + 20, 0x90151515);
 
-            // Отрисовка иконки эффекта для Minecraft 1.21.4 (с RenderLayer::getGuiTextured)
+            // Отрисовка иконки зелья (Minecraft 1.21.4)
             if (sprite != null) {
                 context.drawTexture(
                     RenderLayer::getGuiTextured,
@@ -62,21 +71,21 @@ public class PotionsHUD extends HudModule {
                 );
             }
 
-            // Название эффекта + римская цифра уровня
+            // Название эффекта + уровень
             String name = effect.value().getName().getString();
             int amplifier = effectInstance.getAmplifier();
             if (amplifier > 0) {
                 name += " " + getRomanAmplifier(amplifier + 1);
             }
 
-            // Оставшееся время (мм:сс)
+            // Время действия (мм:сс)
             String duration = formatDuration(effectInstance);
 
-            // Текст названия (белый 0xFFFFFFFF) и времени (серый 0xFFAAAAAA)
+            // Отрисовка текста названия и таймера
             context.drawTextWithShadow(client.textRenderer, name, x + 22, y + yOffset + 2, 0xFFFFFFFF);
             context.drawTextWithShadow(client.textRenderer, duration, x + 22, y + yOffset + 11, 0xFFAAAAAA);
 
-            // Подгоняем ширину под самый длинный текст
+            // Динамический расчет ширины под длинные названия
             int entryWidth = client.textRenderer.getWidth(name) + 28;
             if (entryWidth > maxWidth) {
                 maxWidth = entryWidth;
@@ -84,10 +93,6 @@ public class PotionsHUD extends HudModule {
 
             yOffset += 23;
         }
-
-        // Передаем размеры в HudModule для HudEditor
-        this.width = maxWidth;
-        this.height = Math.max(yOffset, 20);
     }
 
     private String formatDuration(StatusEffectInstance effect) {
