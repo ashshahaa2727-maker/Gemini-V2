@@ -11,6 +11,7 @@ import wtf.gemini.hud.InfoPanel;
 import wtf.gemini.hud.KeyStrokes;
 import wtf.gemini.hud.TargetHUD;
 import wtf.gemini.hud.WaterMark;
+import wtf.gemini.hud.PotionsHUD;
 import wtf.gemini.modules.impl.movement.Sprint;
 import wtf.gemini.modules.impl.player.AutoFish;
 import wtf.gemini.modules.impl.player.ItemScroller;
@@ -60,6 +61,7 @@ public class ModuleStorage {
         register(new Trajectories());
         register(new TargetEsp());
         register(new SeeInvisible());
+        register(new PotionsHUD());
 
         // Включены по умолчанию (пассивные / HUD)
         get(ItemScroller.class).setEnabled(true);
@@ -72,15 +74,13 @@ public class ModuleStorage {
         get(TargetHUD.class).setEnabled(true);
         get(ArmorHUD.class).setEnabled(true);
         get(HudStyle.class).setEnabled(true);
-        // Вне HolyWorld модуль молчит: запросы к REST API уходят только на их серверах.
         get(CoinRate.class).setEnabled(true);
-        // Тема применяется постоянно, поэтому включена всегда — иначе цвета «замерзали» бы.
         get(Theme.class).setEnabled(true);
         get(Zoom.class).setEnabled(true);
-        // ItemSwap — модуль-действие: он включён и ждёт нажатия своей клавиши.
         get(ItemSwap.class).setEnabled(true);
         get(Trajectories.class).setEnabled(true);
         get(TargetEsp.class).setEnabled(true);
+        get(PotionsHUD.class).setEnabled(true);
     }
 
     private void register(Module module) {
@@ -91,17 +91,12 @@ public class ModuleStorage {
     public void tick() {
         if (MinecraftClient.getInstance().player == null) return;
         for (Module m : modules) {
-            // Скрытая функция не должна реагировать ни на клавишу, ни на тик.
             if (m.isBlocked()) continue;
             handleKey(m);
             if (m.isEnabled()) m.onTick();
         }
     }
 
-    /**
-     * Клавиша модуля: удерживаемая включает модуль на время нажатия, клавиша-действие
-     * выполняет действие, обычная — переключает состояние.
-     */
     private void handleKey(Module m) {
         if (m.isActionModule()) {
             while (m.getKeyBinding().wasPressed()) {
@@ -121,21 +116,13 @@ public class ModuleStorage {
         }
     }
 
-    /** Отрисовка модулей в мире. Подписана на {@code WorldRenderEvents.LAST}. */
     public void renderWorld(WorldRenderContext context) {
-        // Матрицы кадра нужны всем, кто проецирует мир в экранные координаты: рамки, метки.
         Projection.capture(context);
         for (Module m : getVisibleModules()) {
             if (m.isEnabled()) m.onWorldRender(context);
         }
     }
 
-    /**
-     * Модули, которые можно показывать игроку: без скрытых сервером.
-     *
-     * <p>Список кэшируется: вызывается каждый кадр из отрисовки HUD, а аллокации в кадре
-     * здесь не приветствуются. Кэш сбрасывается при изменении блок-листа.
-     */
     public List<Module> getVisibleModules() {
         List<Module> cached = visibleCache;
         if (cached == null) {
@@ -148,17 +135,14 @@ public class ModuleStorage {
         return cached;
     }
 
-    /** Сбрасывает кэш видимых модулей. Вызывается после изменения блок-листа сервера. */
     public void invalidateVisible() {
         visibleCache = null;
     }
 
-    /** Все модули, включая скрытые — для конфига и служебных обходов. */
     public List<Module> getModules() {
         return modules;
     }
 
-    /** Все идентификаторы функций для запроса {@code checkFeatures} (без повторов). */
     public Set<String> getFeatureIds() {
         Set<String> ids = new LinkedHashSet<>();
         for (Module m : modules) {
@@ -176,11 +160,6 @@ public class ModuleStorage {
         return module;
     }
 
-    /**
-     * Безопасный поиск модуля.
-     *
-     * @return модуль или {@code null}, если он ещё не зарегистрирован
-     */
     @SuppressWarnings("unchecked")
     public <T extends Module> T find(Class<T> type) {
         for (Module m : modules) {
