@@ -2,13 +2,12 @@ package wtf.gemini.hud;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.texture.Sprite;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffectUtil;
 import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.text.Text;
-import wtf.gemini.theme.Colors;
+import wtf.gemini.Module.Category;
 import wtf.gemini.util.Render2D;
 
 import java.util.ArrayList;
@@ -19,16 +18,12 @@ import java.util.List;
 public class PotionsHUD extends HudModule {
 
     public PotionsHUD() {
-        super("Potions", 10, 120, 110, 50);
+        // Если категории HUD у вас нет в enum Category, укажите Category.RENDER
+        super("Potions", Category.HUD, "Отображает список активных эффектов зелий");
     }
 
-    /**
-     * ВНИМАНИЕ: Если в вашем HudModule абстрактный метод называется draw, 
-     * смените render на draw.
-     * Если вы убрали final у onHudRender в HudModule.java, можно оставить onHudRender.
-     */
     @Override
-    public void render(DrawContext context) {
+    public void renderAt(DrawContext context, int x, int y) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) return;
 
@@ -37,12 +32,10 @@ public class PotionsHUD extends HudModule {
             return;
         }
 
-        // Сортируем эффекты по оставшемуся времени или названию
+        // Сортировка по убыванию времени действия
         List<StatusEffectInstance> sortedEffects = new ArrayList<>(effects);
         sortedEffects.sort(Comparator.comparingInt(StatusEffectInstance::getDuration).reversed());
 
-        int currentX = (int) this.getX();
-        int currentY = (int) this.getY();
         int yOffset = 0;
         int maxWidth = 110;
 
@@ -50,29 +43,40 @@ public class PotionsHUD extends HudModule {
             RegistryEntry<StatusEffect> effect = effectInstance.getEffectType();
             Sprite sprite = client.getStatusEffectSpriteManager().getSprite(effect);
 
-            // Фон под плашку эффекта (стиль Gemini HUD)
-            Render2D.drawRound(context, currentX, currentY + yOffset, maxWidth, 20, 4, Colors.BACKGROUND.getColor());
+            // Отрисовка подложки через Render2D (ARGB цвет 0x90151515)
+            Render2D.drawRound(context, x, y + yOffset, maxWidth, 20, 4, 0x90151515);
 
-            // 1. ИСПРАВЛЕНИЕ ОШИБКИ СО СПРАЙТОМ (бывшая строка 66):
-            // Используется context.drawSprite без лишнего sprite.getAtlasId()
+            // Отрисовка иконки эффекта для Minecraft 1.21.4 (с RenderLayer::getGuiTextured)
             if (sprite != null) {
-                context.drawSprite(currentX + 2, currentY + yOffset + 2, 0, 16, 16, sprite);
+                context.drawTexture(
+                    RenderLayer::getGuiTextured,
+                    sprite.getAtlasId(),
+                    x + 2,
+                    y + yOffset + 2,
+                    (float) sprite.getX(),
+                    (float) sprite.getY(),
+                    16,
+                    16,
+                    256,
+                    256
+                );
             }
 
-            // Формируем имя эффекта и римскую цифру уровня
+            // Название эффекта + римская цифра уровня
             String name = effect.value().getName().getString();
             int amplifier = effectInstance.getAmplifier();
             if (amplifier > 0) {
                 name += " " + getRomanAmplifier(amplifier + 1);
             }
 
-            // Форматируем время действия эффекта (мм:сс)
-            String duration = formatDuration(effectInstance, client);
+            // Оставшееся время (мм:сс)
+            String duration = formatDuration(effectInstance);
 
-            // Отрисовка названия и таймера
-            context.drawTextWithShadow(client.textRenderer, name, currentX + 22, currentY + yOffset + 2, Colors.WHITE.getRGB());
-            context.drawTextWithShadow(client.textRenderer, duration, currentX + 22, currentY + yOffset + 11, Colors.GRAY.getRGB());
+            // Текст названия (белый 0xFFFFFFFF) и времени (серый 0xFFAAAAAA)
+            context.drawTextWithShadow(client.textRenderer, name, x + 22, y + yOffset + 2, 0xFFFFFFFF);
+            context.drawTextWithShadow(client.textRenderer, duration, x + 22, y + yOffset + 11, 0xFFAAAAAA);
 
+            // Подгоняем ширину под самый длинный текст
             int entryWidth = client.textRenderer.getWidth(name) + 28;
             if (entryWidth > maxWidth) {
                 maxWidth = entryWidth;
@@ -81,15 +85,12 @@ public class PotionsHUD extends HudModule {
             yOffset += 23;
         }
 
-        // Обновляем габариты HUD-элемента для перетаскивания в HudEditor
-        this.setWidth(maxWidth);
-        this.setHeight(Math.max(yOffset, 20));
+        // Передаем размеры в HudModule для HudEditor
+        this.width = maxWidth;
+        this.height = Math.max(yOffset, 20);
     }
 
-    /**
-     * Безопасное форматирование времени для разных версий Fabric/Yarn
-     */
-    private String formatDuration(StatusEffectInstance effect, MinecraftClient client) {
+    private String formatDuration(StatusEffectInstance effect) {
         if (effect.isInfinite()) {
             return "**:**";
         }
@@ -99,9 +100,6 @@ public class PotionsHUD extends HudModule {
         return String.format("%02d:%02d", minutes, seconds);
     }
 
-    /**
-     * Преобразование уровня эффекта в римские цифры (II, III, IV...)
-     */
     private String getRomanAmplifier(int level) {
         return switch (level) {
             case 1 -> "I";
