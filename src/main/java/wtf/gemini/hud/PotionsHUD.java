@@ -1,83 +1,115 @@
 package wtf.gemini.hud;
 
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.texture.Sprite;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffectUtil;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.text.Text;
 import wtf.gemini.theme.Colors;
 import wtf.gemini.util.Render2D;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
 
 public class PotionsHUD extends HudModule {
-    private int width = 100;
-    private int height = 24;
 
     public PotionsHUD() {
-        super("PotionsHUD", Category.HUD, "Отображает активные эффекты зелий");
+        super("Potions", 10, 120, 110, 50);
     }
 
-    @Override public int getWidth() { return width; }
-    @Override public int getHeight() { return height; }
-    @Override protected int defaultX(int sw, int sh) { return sw - 110; }
-    @Override protected int defaultY(int sw, int sh) { return sh / 2 - 50; }
-
+    /**
+     * ВНИМАНИЕ: Если в вашем HudModule абстрактный метод называется draw, 
+     * смените render на draw.
+     * Если вы убрали final у onHudRender в HudModule.java, можно оставить onHudRender.
+     */
     @Override
-    public void onHudRender(DrawContext context) {
-        if (mc.player == null) return;
+    public void render(DrawContext context) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null) return;
 
-        Collection<StatusEffectInstance> effects = mc.player.getStatusEffects();
-        if (effects.isEmpty() && !HudEditor.isEditing()) return;
-
-        int x = getX();
-        int y = getY();
-
-        int yOffset = 0;
-        int maxWidth = 60;
-
-        // Рисуем подложку, если мы в редакторе (чтобы было за что тянуть) или есть эффекты
+        Collection<StatusEffectInstance> effects = client.player.getStatusEffects();
         if (effects.isEmpty()) {
-            Render2D.panel(context, x, y, 100, 24);
-            context.drawTextWithShadow(mc.textRenderer, "Эффекты", x + 5, y + 8, Colors.muted());
-            this.width = 100;
-            this.height = 24;
             return;
         }
 
-        for (StatusEffectInstance effect : effects) {
-            StatusEffect type = effect.getEffectType().value();
-            String name = type.getName().getString();
-            if (effect.getAmplifier() > 0) {
-                name += " " + (effect.getAmplifier() + 1);
+        // Сортируем эффекты по оставшемуся времени или названию
+        List<StatusEffectInstance> sortedEffects = new ArrayList<>(effects);
+        sortedEffects.sort(Comparator.comparingInt(StatusEffectInstance::getDuration).reversed());
+
+        int currentX = (int) this.getX();
+        int currentY = (int) this.getY();
+        int yOffset = 0;
+        int maxWidth = 110;
+
+        for (StatusEffectInstance effectInstance : sortedEffects) {
+            RegistryEntry<StatusEffect> effect = effectInstance.getEffectType();
+            Sprite sprite = client.getStatusEffectSpriteManager().getSprite(effect);
+
+            // Фон под плашку эффекта (стиль Gemini HUD)
+            Render2D.drawRound(context, currentX, currentY + yOffset, maxWidth, 20, 4, Colors.BACKGROUND.getColor());
+
+            // 1. ИСПРАВЛЕНИЕ ОШИБКИ СО СПРАЙТОМ (бывшая строка 66):
+            // Используется context.drawSprite без лишнего sprite.getAtlasId()
+            if (sprite != null) {
+                context.drawSprite(currentX + 2, currentY + yOffset + 2, 0, 16, 16, sprite);
             }
-            
-            int duration = effect.getDuration() / 20;
-            String time = String.format("%02d:%02d", duration / 60, duration % 60);
-            if (effect.isInfinite()) time = "**:**";
 
-            int currentWidth = 24 + mc.textRenderer.getWidth(name) + 10 + mc.textRenderer.getWidth(time);
-            maxWidth = Math.max(maxWidth, currentWidth);
+            // Формируем имя эффекта и римскую цифру уровня
+            String name = effect.value().getName().getString();
+            int amplifier = effectInstance.getAmplifier();
+            if (amplifier > 0) {
+                name += " " + getRomanAmplifier(amplifier + 1);
+            }
 
-            // Отрисовка фона для конкретного эффекта
-            Render2D.panel(context, x, y + yOffset, currentWidth, 18);
+            // Форматируем время действия эффекта (мм:сс)
+            String duration = formatDuration(effectInstance, client);
 
-            // Отрисовка иконки
-            Sprite sprite = mc.getStatusEffectSpriteManager().getSprite(effect.getEffectType());
-            context.drawTexture(sprite.getAtlasId(), x + 2, y + yOffset + 1, 0, 16, 16, sprite);
+            // Отрисовка названия и таймера
+            context.drawTextWithShadow(client.textRenderer, name, currentX + 22, currentY + yOffset + 2, Colors.WHITE.getRGB());
+            context.drawTextWithShadow(client.textRenderer, duration, currentX + 22, currentY + yOffset + 11, Colors.GRAY.getRGB());
 
-            // Текст
-            context.drawTextWithShadow(mc.textRenderer, name, x + 22, y + yOffset + 5, Colors.text());
-            context.drawTextWithShadow(mc.textRenderer, time, x + 22 + mc.textRenderer.getWidth(name) + 5, y + yOffset + 5, Colors.muted());
+            int entryWidth = client.textRenderer.getWidth(name) + 28;
+            if (entryWidth > maxWidth) {
+                maxWidth = entryWidth;
+            }
 
-            yOffset += 20;
+            yOffset += 23;
         }
 
-        this.width = maxWidth;
-        this.height = Math.max(20, yOffset);
+        // Обновляем габариты HUD-элемента для перетаскивания в HudEditor
+        this.setWidth(maxWidth);
+        this.setHeight(Math.max(yOffset, 20));
     }
 
-    @Override
-    protected void renderAt(DrawContext context, int x, int y) {
-        // Логика отрисовки полностью в onHudRender для динамического изменения размеров
+    /**
+     * Безопасное форматирование времени для разных версий Fabric/Yarn
+     */
+    private String formatDuration(StatusEffectInstance effect, MinecraftClient client) {
+        if (effect.isInfinite()) {
+            return "**:**";
+        }
+        int totalSeconds = effect.getDuration() / 20;
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    /**
+     * Преобразование уровня эффекта в римские цифры (II, III, IV...)
+     */
+    private String getRomanAmplifier(int level) {
+        return switch (level) {
+            case 1 -> "I";
+            case 2 -> "II";
+            case 3 -> "III";
+            case 4 -> "IV";
+            case 5 -> "V";
+            default -> String.valueOf(level);
+        };
     }
 }
